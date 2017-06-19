@@ -79,6 +79,24 @@ namespace EarTrumpet.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to No devices found.
+        /// </summary>
+        public static string ContextMenuNoDevices {
+            get {
+                return ResourceManager.GetString("ContextMenuNoDevices", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Send Feedback....
+        /// </summary>
+        public static string ContextMenuSendFeedback {
+            get {
+                return ResourceManager.GetString("ContextMenuSendFeedback", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Show Desktop Apps.
         /// </summary>
         public static string ContextMenuShowDesktopAppsTitle {
@@ -97,11 +115,38 @@ namespace EarTrumpet.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to It doesn&apos;t look like you have any audio devices..
+        /// </summary>
+        public static string NoDevicesPanelContent {
+            get {
+                return ResourceManager.GetString("NoDevicesPanelContent", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Speech Runtime.
+        /// </summary>
+        public static string SpeechRuntimeDisplayName {
+            get {
+                return ResourceManager.GetString("SpeechRuntimeDisplayName", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to System Sounds.
         /// </summary>
         public static string SystemSoundsDisplayName {
             get {
                 return ResourceManager.GetString("SystemSoundsDisplayName", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Volume Control for Windows.
+        /// </summary>
+        public static string TrayIconTooltipText {
+            get {
+                return ResourceManager.GetString("TrayIconTooltipText", resourceCulture);
             }
         }
     }

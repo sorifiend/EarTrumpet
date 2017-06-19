@@ -3,6 +3,7 @@
 #include <Mmdeviceapi.h>
 #include <Appmodel.h>
 #include <ShlObj.h>
+#include <Shlwapi.h>
 #include <propkey.h>
 #include <PathCch.h>
 #include "AudioSessionService.h"
@@ -49,7 +50,6 @@ HRESULT AudioSessionService::RefreshAudioSessions()
     CComPtr<IMMDeviceEnumerator> deviceEnumerator;
     FAST_FAIL(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_INPROC, IID_PPV_ARGS(&deviceEnumerator)));
 
-    // TIP: Role parameter is not actually used https://msdn.microsoft.com/en-us/library/windows/desktop/dd371401.aspx
     CComPtr<IMMDevice> device;
     FAST_FAIL(deviceEnumerator->GetDefaultAudioEndpoint(EDataFlow::eRender, ERole::eMultimedia, &device));
 
@@ -90,7 +90,7 @@ HRESULT AudioSessionService::CreateEtAudioSessionFromAudioSession(CComPtr<IAudio
     FAST_FAIL(audioSessionControl2->GetGroupingParam(&etAudioSession->GroupingId));
 
     CComHeapPtr<wchar_t> sessionIdString;
-    FAST_FAIL(audioSessionControl2->GetSessionIdentifier(&sessionIdString));
+    FAST_FAIL(audioSessionControl2->GetSessionInstanceIdentifier(&sessionIdString));
 
     hash<wstring> stringHash;
     etAudioSession->SessionId = stringHash(static_cast<PWSTR>(sessionIdString));
@@ -100,6 +100,10 @@ HRESULT AudioSessionService::CreateEtAudioSessionFromAudioSession(CComPtr<IAudio
     CComPtr<ISimpleAudioVolume> simpleAudioVolume;
     FAST_FAIL(audioSessionControl->QueryInterface(IID_PPV_ARGS(&simpleAudioVolume)));
     FAST_FAIL(simpleAudioVolume->GetMasterVolume(&etAudioSession->Volume));
+
+    BOOL isMuted;
+    FAST_FAIL(simpleAudioVolume->GetMute(&isMuted));
+    etAudioSession->IsMuted = !!isMuted;
 
     HRESULT hr = IsImmersiveProcess(pid);
     if (hr == S_OK)
@@ -114,7 +118,6 @@ HRESULT AudioSessionService::CreateEtAudioSessionFromAudioSession(CComPtr<IAudio
     else if (hr == S_FALSE)
     {
         bool isSystemSoundsSession = (S_OK == audioSessionControl2->IsSystemSoundsSession());
-
         AudioSessionState state;
         FAST_FAIL(audioSessionControl2->GetState(&state));
         if (!isSystemSoundsSession && (state == AudioSessionState::AudioSessionStateExpired))
@@ -152,7 +155,6 @@ HRESULT AudioSessionService::CreateEtAudioSessionFromAudioSession(CComPtr<IAudio
             wchar_t imagePath[MAX_PATH] = {};
             DWORD dwCch = ARRAYSIZE(imagePath);
             FAST_FAIL(QueryFullProcessImageName(processHandle.get(), 0, imagePath, &dwCch) == 0 ? E_FAIL : S_OK);
-
             FAST_FAIL(SHStrDup(imagePath, &etAudioSession->IconPath));
             FAST_FAIL(SHStrDup(PathFindFileName(imagePath), &etAudioSession->DisplayName));
         }
@@ -272,6 +274,20 @@ HRESULT AudioSessionService::SetAudioSessionVolume(unsigned long sessionId, floa
     return S_OK;
 }
 
+HRESULT AudioSessionService::SetAudioSessionMute(unsigned long sessionId, bool isMuted)
+{
+    if (!_sessionMap[sessionId])
+    {
+        return E_INVALIDARG;
+    }
+
+    CComPtr<ISimpleAudioVolume> simpleAudioVolume;
+    FAST_FAIL(_sessionMap[sessionId]->QueryInterface(IID_PPV_ARGS(&simpleAudioVolume)));
+
+    FAST_FAIL(simpleAudioVolume->SetMute(isMuted, nullptr));
+    return S_OK;
+}
+
 HRESULT AudioSessionService::GetAppProperties(PCWSTR pszAppId, PWSTR* ppszName, PWSTR* ppszIcon, ULONG *background)
 {
     *ppszIcon = nullptr;
@@ -291,20 +307,27 @@ HRESULT AudioSessionService::GetAppProperties(PCWSTR pszAppId, PWSTR* ppszName, 
     CComHeapPtr<wchar_t> iconPath;
     FAST_FAIL(item->GetString(PKEY_AppUserModel_Icon, &iconPath));
 
-    CComHeapPtr<wchar_t> fullPackagePath;
-    FAST_FAIL(item->GetString(PKEY_AppUserModel_PackageFullName, &fullPackagePath));
+    LPWSTR resolvedIconPath;
+    if (UrlIsFileUrl(iconPath))
+    {
+        FAST_FAIL(PathCreateFromUrlAlloc(iconPath, &resolvedIconPath, 0));
+    }
+    else
+    {
+        CComHeapPtr<wchar_t> fullPackagePath;
+        FAST_FAIL(item->GetString(PKEY_AppUserModel_PackageFullName, &fullPackagePath));
 
-    CComPtr<IMrtResourceManager> mrtResMgr;
-    FAST_FAIL(CoCreateInstance(__uuidof(MrtResourceManager), nullptr, CLSCTX_INPROC, IID_PPV_ARGS(&mrtResMgr)));
-    FAST_FAIL(mrtResMgr->InitializeForPackage(fullPackagePath));
+        CComPtr<IMrtResourceManager> mrtResMgr;
+        FAST_FAIL(CoCreateInstance(__uuidof(MrtResourceManager), nullptr, CLSCTX_INPROC, IID_PPV_ARGS(&mrtResMgr)));
+        FAST_FAIL(mrtResMgr->InitializeForPackage(fullPackagePath));
 
-    CComPtr<IResourceMap> resourceMap;
-    FAST_FAIL(mrtResMgr->GetMainResourceMap(IID_PPV_ARGS(&resourceMap)));
+        CComPtr<IResourceMap> resourceMap;
+        FAST_FAIL(mrtResMgr->GetMainResourceMap(IID_PPV_ARGS(&resourceMap)));
+        FAST_FAIL(resourceMap->GetFilePath(iconPath, &resolvedIconPath));
+    }
 
-    CComHeapPtr<wchar_t> resolvedIconPath;
-    FAST_FAIL(resourceMap->GetFilePath(iconPath, &resolvedIconPath));
-
-    *ppszIcon = resolvedIconPath.Detach();
+    *ppszIcon = resolvedIconPath;
     *ppszName = itemName.Detach();
+
     return S_OK;
 }
